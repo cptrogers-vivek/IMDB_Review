@@ -1,0 +1,89 @@
+X = np.array(df['review_vector'].tolist())
+y = df['sentiment']  
+
+label_encoder = LabelEncoder()
+y = label_encoder.fit_transform(y)
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+model = LogisticRegression(max_iter=1000)
+
+model.fit(X_train, y_train)
+
+y_pred = model.predict(X_test)
+
+accuracy = accuracy_score(y_test, y_pred)
+precision = precision_score(y_test, y_pred)
+recall = recall_score(y_test, y_pred)
+f1 = f1_score(y_test, y_pred)
+
+print(f'Accuracy: {accuracy:.2f}')
+print(f'Precision: {precision:.2f}')
+print(f'Recall: {recall:.2f}')
+print(f'F1-Score: {f1:.2f}')
+
+conf_matrix = confusion_matrix(y_test, y_pred)
+
+plt.figure(figsize=(8, 6))
+sns.heatmap(conf_matrix, annot=True, fmt='d', cmap='Blues', xticklabels=label_encoder.classes_, yticklabels=label_encoder.classes_)
+plt.title('Confusion Matrix')
+plt.xlabel('Tahmin Edilen Etiket')
+plt.ylabel('Gerçek Etiket')
+plt.show()
+
+y_pred_proba = model.predict_proba(X_test)[:, 1]
+fpr, tpr, _ = roc_curve(y_test, y_pred_proba)
+plt.plot(fpr, tpr)
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('ROC Curve')
+plt.show()
+
+auc = roc_auc_score(y_test, y_pred_proba)
+print(f'AUC Score: {auc:.2f}')
+
+le = LabelEncoder()
+df['sentiment'] = le.fit_transform(df['sentiment'])
+
+X_train, X_test, y_train, y_test = train_test_split(df['review'], df['sentiment'], test_size=0.2, random_state=42)
+
+vectorizer = TfidfVectorizer(stop_words='english')
+X_train_tfidf = vectorizer.fit_transform(X_train)
+X_test_tfidf = vectorizer.transform(X_test)
+
+model = LogisticRegression(C=1)
+model.fit(X_train_tfidf, y_train)
+
+y_pred = model.predict(X_test_tfidf)
+accuracy = accuracy_score(y_test, y_pred)
+print(f"Accuracy: {accuracy}")
+
+precision = precision_score(y_test, y_pred, average='binary')
+
+recall = recall_score(y_test, y_pred, average='binary')
+
+f1 = f1_score(y_test, y_pred, average='binary')
+
+accuracy = accuracy_score(y_test, y_pred)
+
+print(f"Accuracy: {accuracy:.2f}")
+print(f"Precision: {precision:.2f}")
+print(f"Recall: {recall:.2f}")
+print(f"F1 Score: {f1:.2f}")
+
+kmeans = KMeans(n_clusters=2, random_state=42)
+kmeans.fit(X_train_tfidf)
+
+print(kmeans.labels_[:1000])
+
+gpt2_tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
+gpt2_model = GPT2LMHeadModel.from_pretrained('gpt2')
+
+def generate_text(prompt):
+    inputs = gpt2_tokenizer.encode(prompt, return_tensors='pt')
+    outputs = gpt2_model.generate(inputs, max_length=100, num_return_sequences=1)
+    generated_text = gpt2_tokenizer.decode(outputs[0], skip_special_tokens=True)
+    return generated_text
+
+prompt = "The movie was a thrilling experience"
+print(generate_text(prompt))
