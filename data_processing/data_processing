@@ -1,0 +1,123 @@
+import warnings
+warnings.filterwarnings('ignore')
+
+import numpy as np
+import pandas as pd
+import seaborn as sns
+from matplotlib import pyplot as plt
+import re
+from tqdm import tqdm
+from collections import Counter
+from nltk.stem import WordNetLemmatizer
+from nltk.tokenize import word_tokenize
+import plotly.express as pe
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, classification_report, confusion_matrix
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
+from wordcloud import WordCloud
+from gensim.models import Word2Vec
+from nltk.corpus import stopwords
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.linear_model import LogisticRegression
+from sklearn.cluster import KMeans
+from transformers import GPT2LMHeadModel, GPT2Tokenizer
+from sklearn.metrics import roc_auc_score, roc_curve
+from pymongo import MongoClient
+
+df = pd.read_csv('IMDB Dataset.csv')
+
+df
+
+df.isnull().sum()
+
+plt.figure(figsize=(8, 6))
+sns.countplot(x='sentiment', data=df)
+plt.title('Distribution of positive and negative comments')
+plt.xlabel('Positive or Negative')
+plt.ylabel('Number of Reviews')
+plt.show()
+
+distribution = df['sentiment'].value_counts(normalize=True) * 100 
+print(distribution)
+
+df["review"][0]
+
+stop_words = set(stopwords.words('english'))
+
+custom_stop_words =stop_words.union({
+    'br','movie','character','make','film','one','even'
+})
+
+def clean_text(text):
+    text = re.sub(r'\W', ' ', str(text)) 
+    text = text.lower() 
+    text = text.split()  
+    text = [word for word in text if word not in custom_stop_words] 
+    text = ' '.join(text)
+    return text
+
+df['cleaned_text'] = df['review'].apply(clean_text)
+
+df["cleaned_text"][0]
+
+positive_reviews = df[df['sentiment'] == 'positive']['cleaned_text']
+negative_reviews = df[df['sentiment'] == 'negative']['cleaned_text']
+
+sentences = [text.split() for text in df['cleaned_text']]
+
+word2vec_model = Word2Vec(sentences, vector_size=100, window=5, min_count=5, workers=4)
+
+word2vec_model.wv.most_similar('bad')
+
+def count_words(data):
+    words_counts = []
+    for text in tqdm(data):
+        words = word_tokenize(text)
+        words_counts.extend(words)
+    return Counter(words_counts).most_common()
+
+positive_words = df[df['sentiment'] == 'positive']
+negative_words = df[df['sentiment'] == 'negative']
+
+positive_words_count = pd.DataFrame(count_words(positive_words['review']), columns=['Words', 'Count'])
+negative_words_count = pd.DataFrame(count_words(negative_words['review']), columns=['Words', 'Count'])
+
+negative_words_count
+
+positive_words_count
+
+pe.bar(data_frame=positive_words_count[:10], x='Words', y='Count', title='Positive Word Frequency', color='Words')
+
+pe.bar(data_frame=negative_words_count[:10], x='Words', y='Count', title='Negative Words Frequency', color='Words')
+
+def get_review_vector(review, model):
+    words = review.split()
+    word_vectors = [model.wv[word] for word in words if word in model.wv]
+    if len(word_vectors) == 0:
+        return np.zeros(model.vector_size)
+    else:
+        return np.mean(word_vectors, axis=0)
+
+df['review_vector'] = df['cleaned_text'].apply(lambda x: get_review_vector(x, word2vec_model))
+
+client = MongoClient('mongodb://localhost:27017/')
+db = client['imdb_project']
+collection = db['imdb_reviews']
+
+def convert_arrays(row):
+    for col in row.index:
+        if isinstance(row[col], np.ndarray):
+            row[col] = row[col].tolist()
+    return row
+
+df = df.apply(convert_arrays, axis=1)
+
+data_dict = df.to_dict("records")
+
+collection.insert_many(data_dict)
+
+collection.create_index([("sentiment", 1)])
+collection.create_index([("review_length", 1)])
+
+print("Data loaded and indexed in MongoDB.")
+
