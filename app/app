@@ -1,0 +1,40 @@
+from flask import Flask
+
+def create_app():
+    app = Flask(__name__)
+
+    app.config['SECRET_KEY'] = 'your_secret_key'
+    app.config['MONGO_URI'] = 'your_mongodb_uri'
+
+    from .routes import main
+    app.register_blueprint(main)
+
+    return app
+
+from flask import Blueprint, render_template, request
+from your_model import classify_review, generate_text  # import your model functions
+from flask_pymongo import PyMongo
+
+main = Blueprint('main', __name__)
+mongo = PyMongo()
+
+@main.route('/', methods=['GET', 'POST'])
+def index():
+    if request.method == 'POST':
+        review = request.form['review']
+        predicted_class = classify_review(review)  # Classify the review
+
+        prompt = request.form['prompt']
+        generated_text = generate_text(prompt)  # Generate text from prompt
+
+        mongo.db.reviews.insert_one({'review': review, 'predicted_class': predicted_class})
+
+        return render_template('results.html', predicted_class=predicted_class, generated_text=generated_text)
+    return render_template('index.html')
+
+from flask_pymongo import PyMongo
+
+mongo = PyMongo(app)
+
+export FLASK_APP=src/app
+flask run
